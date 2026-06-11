@@ -349,6 +349,56 @@
     .link:hover { text-decoration: underline; }
 
     .flex-gap { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    /* ── Deals tracker ── */
+    .deal-status { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+    .deal-status.holding { background: #1a2840; color: var(--accent2); }
+    .deal-status.sold    { background: #142a1a; color: var(--green); }
+    .deal-status.loss    { background: #2a1414; color: var(--red); }
+
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+
+    /* ── Mod tags ── */
+    .mod-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .mod-tag {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .mod-tag.active { background: var(--surface2); color: var(--accent2); border-color: var(--accent2); }
+
+    /* ── Rates editor ── */
+    .rates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+    .rate-row {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg); padding: 7px 10px;
+      border-radius: 6px; border: 1px solid var(--border);
+    }
+    .rate-row .rate-name { flex:1; font-size:12px; }
+    .rate-row input { width: 70px; font-size: 12px; }
+
+    /* ── JSON query box ── */
+    .json-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #88c0a8;
+      max-height: 140px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin-top: 10px;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -365,6 +415,7 @@
   <button class="active" onclick="switchTab('search')">🔍 Поиск &lt;1ex</button>
   <button onclick="switchTab('monitor')">📈 Мониторинг</button>
   <button onclick="switchTab('calc')">⚖ Калькулятор крафта</button>
+  <button onclick="switchTab('deals')">💼 Трекер сделок</button>
   <button onclick="switchTab('guide')">📖 Гайд</button>
 </nav>
 
@@ -440,14 +491,21 @@
         </div>
       </div>
 
+      <div class="field" style="margin-bottom:12px">
+        <label>Быстрые фильтры по модам <span class="tip" data-tip="Добавляет требование наличия мода в запросе к Trade API">?</span></label>
+        <div class="mod-tags" id="mod-tags"></div>
+      </div>
+
       <div class="flex-gap">
         <button class="btn btn-primary" onclick="searchItems()">
           <span id="search-spinner" style="display:none" class="spinner"></span>
           Найти предметы
         </button>
         <button class="btn btn-secondary" onclick="openInTrade()">Открыть в PoE2 Trade →</button>
+        <button class="btn btn-secondary" onclick="toggleJsonPreview()">{ } JSON запрос</button>
         <button class="btn btn-secondary" onclick="clearResults()">Очистить</button>
       </div>
+      <div id="json-preview" class="json-box"></div>
     </div>
 
     <div id="search-status" class="status-bar"></div>
@@ -633,6 +691,14 @@
     </div>
 
     <div class="card">
+      <h2>💱 Курсы валют <span style="color:var(--muted);font-size:11px;font-weight:400">(редактируй под текущий рынок)</span></h2>
+      <div class="rates-grid" id="rates-editor"></div>
+      <div style="margin-top:10px">
+        <button class="btn btn-secondary btn-sm" onclick="resetRates()">Сбросить по умолчанию</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>📋 История крафтов</h2>
       <div class="flex-gap" style="margin-bottom:12px">
         <button class="btn btn-primary btn-sm" onclick="saveCraft()">Сохранить</button>
@@ -644,7 +710,49 @@
     </div>
   </div>
 
-  <!-- ══════════════════ TAB 4: GUIDE ══════════════════ -->
+  <!-- ══════════════════ TAB 4: DEALS ══════════════════ -->
+  <div id="tab-deals" class="tab-panel">
+    <div class="card">
+      <h2>💼 Добавить сделку</h2>
+      <div class="row">
+        <div class="field" style="flex:2;min-width:200px">
+          <label>Предмет</label>
+          <input type="text" id="deal-name" placeholder="напр: Hubris Circlet ilvl82 ES" style="width:100%">
+        </div>
+        <div class="field">
+          <label>Куплено (ex)</label>
+          <input type="number" id="deal-buy" value="1" min="0.01" step="0.01">
+        </div>
+        <div class="field">
+          <label>Продано (ex)</label>
+          <input type="number" id="deal-sell" value="" min="0" step="0.5" placeholder="пусто = держу">
+        </div>
+        <div class="field">
+          <label>Затраты на крафт (ex)</label>
+          <input type="number" id="deal-craft-cost" value="0" min="0" step="0.1">
+        </div>
+        <button class="btn btn-primary" style="align-self:flex-end" onclick="addDeal()">+ Добавить</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📊 Итоги</h2>
+      <div class="summary-grid" id="deals-summary"></div>
+    </div>
+
+    <div class="card">
+      <h2>📋 Все сделки</h2>
+      <div class="flex-gap" style="margin-bottom:12px">
+        <button class="btn btn-secondary btn-sm" onclick="exportDeals()">⬇ Экспорт CSV</button>
+        <button class="btn btn-danger btn-sm" onclick="clearDeals()">Очистить всё</button>
+      </div>
+      <div id="deals-list">
+        <div class="empty">Нет сделок. Добавьте выше или из вкладки «Поиск».</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TAB 5: GUIDE ══════════════════ -->
   <div id="tab-guide" class="tab-panel">
     <div class="card">
       <h2>📖 Стратегия: как заработать 50-100 экзальтов</h2>
@@ -743,8 +851,42 @@ function switchTab(id) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
-  const idx = ['search','monitor','calc','guide'].indexOf(id);
+  const idx = ['search','monitor','calc','deals','guide'].indexOf(id);
   document.querySelectorAll('nav button')[idx].classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════
+//  Mod tags
+// ══════════════════════════════════════════════════════
+const POPULAR_MODS = [
+  { label: 'Max Life',         id: 'pseudo.pseudo_total_life' },
+  { label: 'Energy Shield',    id: 'pseudo.pseudo_total_es' },
+  { label: 'Fire Res',         id: 'pseudo.pseudo_total_fire_resistance' },
+  { label: 'Cold Res',         id: 'pseudo.pseudo_total_cold_resistance' },
+  { label: 'Lightning Res',    id: 'pseudo.pseudo_total_lightning_resistance' },
+  { label: 'All Res',          id: 'pseudo.pseudo_total_all_elemental_resistance' },
+  { label: 'Attack Speed',     id: 'explicit.stat_681332047' },
+  { label: 'Crit Chance',      id: 'explicit.stat_587431675' },
+  { label: 'Spell Damage',     id: 'explicit.stat_2974417149' },
+  { label: 'Strength',         id: 'pseudo.pseudo_total_strength' },
+  { label: 'Dexterity',        id: 'pseudo.pseudo_total_dexterity' },
+  { label: 'Intelligence',     id: 'pseudo.pseudo_total_intelligence' },
+  { label: 'Chaos Res',        id: 'pseudo.pseudo_total_chaos_resistance' },
+  { label: 'Mana Regen',       id: 'explicit.stat_789117908' },
+];
+
+let activeMods = new Set();
+
+function buildModTags() {
+  const container = document.getElementById('mod-tags');
+  container.innerHTML = POPULAR_MODS.map(m => `
+    <span class="mod-tag" data-id="${m.id}" onclick="toggleMod(this,'${m.id}')">${m.label}</span>
+  `).join('');
+}
+
+function toggleMod(el, id) {
+  if (activeMods.has(id)) { activeMods.delete(id); el.classList.remove('active'); }
+  else { activeMods.add(id); el.classList.add('active'); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -756,51 +898,64 @@ function showStatus(id, type, msg) {
   el.innerHTML = msg;
 }
 
-function openInTrade() {
-  const league = document.getElementById('league').value;
-  const rarity = document.getElementById('rarity').value;
-  const category = document.getElementById('itemCategory').value;
-  const maxPrice = document.getElementById('maxPrice').value;
-  const minIlvl = document.getElementById('minIlvl').value;
+function buildTradeQuery() {
+  const rarity    = document.getElementById('rarity').value;
+  const category  = document.getElementById('itemCategory').value;
+  const maxPrice  = parseFloat(document.getElementById('maxPrice').value);
+  const minIlvl   = parseInt(document.getElementById('minIlvl').value);
 
   const query = {
     query: {
       status: { option: 'online' },
       filters: {
-        trade_filters: {
-          filters: {
-            price: { max: parseFloat(maxPrice), option: 'exalted' }
-          }
-        },
-        misc_filters: {
-          filters: {
-            ilvl: { min: parseInt(minIlvl) }
-          }
-        }
+        trade_filters: { filters: { price: { max: maxPrice, option: 'exalted' } } },
+        misc_filters:  { filters: { ilvl: { min: minIlvl } } }
       }
     },
     sort: { price: 'asc' }
   };
 
-  if (rarity) query.query.filters.type_filters = { filters: { rarity: { option: rarity } } };
-  if (category) {
-    if (!query.query.filters.type_filters) query.query.filters.type_filters = { filters: {} };
-    query.query.filters.type_filters.filters.category = { option: category };
+  if (rarity || category) {
+    query.query.filters.type_filters = { filters: {} };
+    if (rarity)   query.query.filters.type_filters.filters.rarity   = { option: rarity };
+    if (category) query.query.filters.type_filters.filters.category = { option: category };
   }
 
-  const encoded = encodeURIComponent(JSON.stringify(query));
-  const url = `https://www.pathofexile.com/trade2/search/poe2/${league}`;
+  if (activeMods.size > 0) {
+    query.query.stats = [{
+      type: 'and',
+      filters: [...activeMods].map(id => ({ id, disabled: false }))
+    }];
+  }
+
+  return query;
+}
+
+function openInTrade() {
+  const league = document.getElementById('league').value;
+  const query  = buildTradeQuery();
+  const url    = `https://www.pathofexile.com/trade2/search/poe2/${league}`;
   window.open(url, '_blank');
   showStatus('search-status', 'info',
-    `Открываю PoE2 Trade. Вставь этот запрос вручную или используй прямую ссылку. ` +
-    `<br><small>Параметры: maxPrice=${maxPrice}ex, minIlvl=${minIlvl}, rarity=${rarity||'any'}, category=${category||'any'}</small>`);
+    `Открываю PoE2 Trade. ` +
+    `<br><small>Параметры: maxPrice=${query.query.filters.trade_filters.filters.price.max}ex` +
+    `, minIlvl=${query.query.filters.misc_filters.filters.ilvl.min}` +
+    `${activeMods.size ? ', моды: ' + activeMods.size : ''}</small>`);
+}
+
+function toggleJsonPreview() {
+  const box = document.getElementById('json-preview');
+  if (box.style.display === 'block') { box.style.display = 'none'; return; }
+  const query = buildTradeQuery();
+  box.textContent = JSON.stringify(query, null, 2);
+  box.style.display = 'block';
+  navigator.clipboard?.writeText(JSON.stringify(query, null, 2))
+    .then(() => showStatus('search-status', 'success', '✓ JSON запрос скопирован в буфер обмена'))
+    .catch(() => showStatus('search-status', 'info', 'JSON показан ниже — скопируй вручную'));
 }
 
 function searchItems() {
   const league = document.getElementById('league').value;
-  const maxPrice = parseFloat(document.getElementById('maxPrice').value);
-  const minIlvl = parseInt(document.getElementById('minIlvl').value);
-  const rarity = document.getElementById('rarity').value;
 
   document.getElementById('search-spinner').style.display = 'inline-block';
   document.querySelector('button[onclick="searchItems()"]').disabled = true;
@@ -808,20 +963,7 @@ function searchItems() {
   showStatus('search-status', 'info',
     '<span class="spinner"></span> Запрос к PoE2 Trade API... (если CORS заблокирован — используй кнопку "Открыть в Trade")');
 
-  const body = {
-    query: {
-      status: { option: 'online' },
-      filters: {
-        trade_filters: { filters: { price: { max: maxPrice, option: 'exalted' } } },
-        misc_filters: { filters: { ilvl: { min: minIlvl } } }
-      }
-    },
-    sort: { price: 'asc' }
-  };
-
-  if (rarity) {
-    body.query.filters.type_filters = { filters: { rarity: { option: rarity } } };
-  }
+  const body = buildTradeQuery();
 
   fetch(`https://www.pathofexile.com/api/trade2/search/poe2/${league}`, {
     method: 'POST',
@@ -931,6 +1073,7 @@ function renderDemoTable() {
       <td>
         <button class="btn btn-sm btn-secondary" onclick='addToMonitorFromSearch(${JSON.stringify({ name: item.name, buy: item.buy, target: item.sell })})'>+ Монитор</button>
         <button class="btn btn-sm btn-primary" onclick='loadIntoCraft(${JSON.stringify(item)})' style="margin-left:4px">→ Крафт</button>
+        <button class="btn btn-sm btn-secondary" onclick='addDealFromSearch(${JSON.stringify({ name: item.name, buy: item.buy })});renderDeals();' style="margin-left:4px">+ Сделка</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -1051,6 +1194,43 @@ function updateStats() {
 // ══════════════════════════════════════════════════════
 //  TAB 3: Craft Calculator
 // ══════════════════════════════════════════════════════
+const DEFAULT_RATES = JSON.parse(JSON.stringify(
+  Object.fromEntries(Object.entries(CURRENCY_RATES).map(([k,v]) => [k, v.rate]))
+));
+
+function buildRatesEditor() {
+  const saved = JSON.parse(localStorage.getItem('poe2_rates') || 'null');
+  if (saved) Object.keys(CURRENCY_RATES).forEach(k => { if (saved[k]) CURRENCY_RATES[k].rate = saved[k]; });
+
+  document.getElementById('rates-editor').innerHTML = Object.entries(CURRENCY_RATES).map(([key, cur]) => `
+    <div class="rate-row">
+      <span class="rate-name" style="color:${cur.color}">⬡ ${cur.name}</span>
+      <input type="number" id="rate-${key}" value="${cur.rate}" min="0.001" step="0.01"
+             oninput="updateRate('${key}', this.value)">
+      <span style="color:var(--muted);font-size:11px">ex</span>
+    </div>
+  `).join('');
+}
+
+function updateRate(key, val) {
+  const v = parseFloat(val);
+  if (v > 0) {
+    CURRENCY_RATES[key].rate = v;
+    const saved = Object.fromEntries(Object.keys(CURRENCY_RATES).map(k => [k, CURRENCY_RATES[k].rate]));
+    localStorage.setItem('poe2_rates', JSON.stringify(saved));
+    buildCurrencyList();
+    recalc();
+  }
+}
+
+function resetRates() {
+  Object.keys(CURRENCY_RATES).forEach(k => { CURRENCY_RATES[k].rate = DEFAULT_RATES[k]; });
+  localStorage.removeItem('poe2_rates');
+  buildRatesEditor();
+  buildCurrencyList();
+  recalc();
+}
+
 function buildCurrencyList() {
   const list = document.getElementById('currency-list');
   list.innerHTML = Object.entries(CURRENCY_RATES).map(([key, cur]) => `
@@ -1059,7 +1239,7 @@ function buildCurrencyList() {
       <span style="color:var(--muted);font-size:11px">${cur.rate} ex/шт</span>
       <input type="number" id="cur-${key}" value="0" min="0" step="1"
              oninput="recalc()" placeholder="0">
-      <span style="color:var(--muted);font-size:11px" id="cur-${key}-cost">0 ex</span>
+      <span style="color:var(--muted);font-size:11px" id="cur-${key}-cost">—</span>
     </div>
   `).join('');
 }
@@ -1174,12 +1354,150 @@ function renderCraftHistory() {
 }
 
 // ══════════════════════════════════════════════════════
+//  TAB 4: Deals Tracker
+// ══════════════════════════════════════════════════════
+let deals = JSON.parse(localStorage.getItem('poe2_deals') || '[]');
+
+function saveDeals() { localStorage.setItem('poe2_deals', JSON.stringify(deals)); }
+
+function addDeal() {
+  const name  = document.getElementById('deal-name').value.trim();
+  const buy   = parseFloat(document.getElementById('deal-buy').value);
+  const sell  = document.getElementById('deal-sell').value ? parseFloat(document.getElementById('deal-sell').value) : null;
+  const craft = parseFloat(document.getElementById('deal-craft-cost').value || 0);
+  if (!name) { alert('Введи название предмета'); return; }
+  deals.unshift({ id: Date.now(), name, buy, sell, craft, addedAt: new Date().toLocaleString() });
+  saveDeals();
+  renderDeals();
+  document.getElementById('deal-name').value = '';
+  document.getElementById('deal-sell').value = '';
+  document.getElementById('deal-craft-cost').value = '0';
+}
+
+function markSold(id, sellPrice) {
+  const p = deals.find(d => d.id === id);
+  if (!p) return;
+  const val = prompt('Введи цену продажи (ex):', sellPrice || '');
+  if (val === null) return;
+  p.sell = parseFloat(val);
+  p.soldAt = new Date().toLocaleString();
+  saveDeals();
+  renderDeals();
+}
+
+function removeDeal(id) {
+  deals = deals.filter(d => d.id !== id);
+  saveDeals();
+  renderDeals();
+}
+
+function clearDeals() {
+  if (!confirm('Удалить все сделки?')) return;
+  deals = [];
+  saveDeals();
+  renderDeals();
+}
+
+function exportDeals() {
+  const header = 'Предмет,Куплено (ex),Крафт (ex),Продано (ex),Прибыль (ex),ROI %,Статус,Дата\n';
+  const rows = deals.map(d => {
+    const total = d.buy + d.craft;
+    const profit = d.sell != null ? d.sell - total : '';
+    const roi    = d.sell != null ? (((d.sell / total) - 1) * 100).toFixed(1) : '';
+    const status = d.sell == null ? 'держу' : d.sell >= total ? 'продан' : 'убыток';
+    return [d.name, d.buy, d.craft, d.sell ?? '', profit, roi, status, d.addedAt].join(',');
+  }).join('\n');
+  const blob = new Blob(['﻿' + header + rows], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'poe2_deals.csv'; a.click();
+}
+
+function renderDeals() {
+  const el = document.getElementById('deals-list');
+  if (!deals.length) {
+    el.innerHTML = '<div class="empty">Нет сделок. Добавьте выше.</div>';
+    renderDealsSummary();
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Предмет</th><th>Куплено</th><th>Крафт</th><th>Вложено</th>
+          <th>Продано</th><th>Прибыль</th><th>ROI</th><th>Статус</th><th>Дата</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${deals.map(d => {
+            const total  = d.buy + d.craft;
+            const profit = d.sell != null ? d.sell - total : null;
+            const roi    = d.sell != null ? ((d.sell / total) - 1) * 100 : null;
+            const status = d.sell == null ? 'holding' : profit >= 0 ? 'sold' : 'loss';
+            const statusLabel = { holding: 'Держу', sold: 'Продан', loss: 'Убыток' }[status];
+            return `<tr>
+              <td><strong>${d.name}</strong><div style="font-size:11px;color:var(--muted)">${d.addedAt}</div></td>
+              <td class="price exalt">${d.buy} ex</td>
+              <td style="color:var(--red)">${d.craft > 0 ? d.craft + ' ex' : '—'}</td>
+              <td>${total.toFixed(2)} ex</td>
+              <td class="price exalt">${d.sell != null ? d.sell + ' ex' : '—'}</td>
+              <td class="profit ${profit > 0 ? 'good' : profit < 0 ? 'bad' : ''}">${profit != null ? (profit >= 0 ? '+' : '') + profit.toFixed(1) + ' ex' : '—'}</td>
+              <td class="profit ${roi > 0 ? 'good' : roi < 0 ? 'bad' : ''}">${roi != null ? (roi >= 0 ? '+' : '') + roi.toFixed(0) + '%' : '—'}</td>
+              <td><span class="deal-status ${status}">${statusLabel}</span></td>
+              <td style="color:var(--muted);font-size:11px">${d.soldAt || ''}</td>
+              <td>
+                ${status === 'holding' ? `<button class="btn btn-sm btn-primary" onclick="markSold(${d.id})">Продан</button>` : ''}
+                <button class="btn btn-sm btn-danger" onclick="removeDeal(${d.id})" style="margin-left:4px">✕</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  renderDealsSummary();
+}
+
+function renderDealsSummary() {
+  const closed = deals.filter(d => d.sell != null);
+  const invested    = deals.reduce((s, d) => s + d.buy + d.craft, 0);
+  const returned    = closed.reduce((s, d) => s + d.sell, 0);
+  const profit      = closed.reduce((s, d) => s + d.sell - d.buy - d.craft, 0);
+  const wins        = closed.filter(d => d.sell >= d.buy + d.craft).length;
+  const avgRoi      = closed.length ? (closed.reduce((s,d) => s + (d.sell/(d.buy+d.craft)-1)*100, 0) / closed.length).toFixed(0) : '—';
+
+  document.getElementById('deals-summary').innerHTML = [
+    { label: 'Всего сделок',     val: deals.length,              color: '' },
+    { label: 'Открытых',         val: deals.length - closed.length, color: '' },
+    { label: 'Закрытых',         val: closed.length,             color: '' },
+    { label: 'Вложено (ex)',      val: invested.toFixed(1),        color: 'var(--red)' },
+    { label: 'Выручка (ex)',      val: returned.toFixed(1),        color: 'var(--accent2)' },
+    { label: 'Прибыль (ex)',      val: (profit >= 0 ? '+' : '') + profit.toFixed(1), color: profit >= 0 ? 'var(--green)' : 'var(--red)' },
+    { label: 'Побед / Закрытых', val: `${wins} / ${closed.length}`, color: '' },
+    { label: 'Средний ROI',      val: avgRoi !== '—' ? avgRoi + '%' : '—', color: 'var(--accent)' },
+  ].map(s => `
+    <div class="result-box">
+      <div class="big-num" style="font-size:24px;${s.color ? 'color:' + s.color : ''}">${s.val}</div>
+      <div class="sub">${s.label}</div>
+    </div>
+  `).join('');
+}
+
+// Helper: add deal from search results
+function addDealFromSearch(item) {
+  deals.unshift({ id: Date.now(), name: item.name, buy: item.buy, sell: null, craft: 0, addedAt: new Date().toLocaleString() });
+  saveDeals();
+}
+
+// ══════════════════════════════════════════════════════
 //  Init
 // ══════════════════════════════════════════════════════
+buildModTags();
+buildRatesEditor();
 buildCurrencyList();
 renderDemoTable();
 renderMonitor();
 renderCraftHistory();
+renderDeals();
 recalc();
 </script>
 </body>
