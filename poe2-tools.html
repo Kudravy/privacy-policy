@@ -416,6 +416,7 @@
   <button onclick="switchTab('monitor')">📈 Мониторинг</button>
   <button onclick="switchTab('calc')">⚖ Калькулятор крафта</button>
   <button onclick="switchTab('deals')">💼 Трекер сделок</button>
+  <button onclick="switchTab('recipes')">🔨 Рецепты крафта</button>
   <button onclick="switchTab('guide')">📖 Гайд</button>
 </nav>
 
@@ -752,7 +753,18 @@
     </div>
   </div>
 
-  <!-- ══════════════════ TAB 5: GUIDE ══════════════════ -->
+  <!-- ══════════════════ TAB 5: RECIPES ══════════════════ -->
+  <div id="tab-recipes" class="tab-panel">
+
+    <div class="note">
+      🔨 Пошаговые рецепты для лиги <strong>Runes of Aldur</strong>. Цены указаны в exalted orbs — корректируй через вкладку «Калькулятор» под текущий рынок. Нажми «→ Калькулятор» чтобы загрузить расходы автоматически.
+    </div>
+
+    <div id="recipes-container"></div>
+
+  </div>
+
+  <!-- ══════════════════ TAB 6: GUIDE ══════════════════ -->
   <div id="tab-guide" class="tab-panel">
     <div class="card">
       <h2>📖 Стратегия: как заработать 50-100 экзальтов</h2>
@@ -851,7 +863,7 @@ function switchTab(id) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
-  const idx = ['search','monitor','calc','deals','guide'].indexOf(id);
+  const idx = ['search','monitor','calc','deals','recipes','guide'].indexOf(id);
   document.querySelectorAll('nav button')[idx].classList.add('active');
 }
 
@@ -1482,6 +1494,252 @@ function renderDealsSummary() {
   `).join('');
 }
 
+// ══════════════════════════════════════════════════════
+//  TAB 5: Craft Recipes
+// ══════════════════════════════════════════════════════
+const RECIPES = [
+  {
+    id: 'r1',
+    title: 'ES Hubris Circlet — топ шлем для кастеров',
+    tag: 'Броня · ilvl82+',
+    risk: 'средний',
+    budget: '3–8 ex',
+    sellRange: '40–120 ex',
+    roi: '10–30x',
+    color: '#7eb8d4',
+    base: 'Hubris Circlet (ilvl 82 или 83)',
+    basePrice: '0.5–1 ex',
+    goal: 'T1 Energy Shield + T1 Mana / +1 к скилам + хорошие суффиксы',
+    steps: [
+      { cur: 'Покупка базы', qty: '1', cost: '~0.5 ex', text: 'Ищи Hubris Circlet ilvl82+ с хотя бы 1 хорошим модом (T1 ES или "+1 к уровню заклинаний"). Без нужных модов не берём.' },
+      { cur: 'Chaos Orb', qty: '10–30', cost: '1–3 ex', text: 'Chaos-спам: каждый раз полностью ребролит Rare. Останавливаемся когда видим 2+ нужных мода (T1 ES + что-то ещё полезное). Ожидаемое среднее — 15–25 хаосов.' },
+      { cur: 'Annulment Orb', qty: '1–2', cost: '3–6 ex', text: 'Если есть 3 хороших мода и 1 мусорный — Annulment убирает случайный. Используем только если цена предмета уже >20ex без него. Риск: можно убрать нужный мод.' },
+      { cur: 'Exalted Orb', qty: '1', cost: '1 ex', text: 'Если на предмете 3 хороших мода (и свободный слот) — добавляем 4й. Не трогаем если уже 4–6 хороших модов.' },
+      { cur: 'Divine Orb', qty: '1', cost: '~17 ex', text: 'ТОЛЬКО если предмет уже стоит 50+ ex — диваин ребролит значения. Например T1 ES имеет диапазон 220–270: если выпало 225 — диваин может дать 268. Окупается только на дорогих предметах.' },
+      { cur: 'Vaal Orb', qty: '1', cost: '~0.5 ex', text: 'Финальный гамбл. 25% — хороший имплицит (+1 к скилам, +% ES). 25% — предмет становится corrupted без изменений (не страшно). 25% — мусорный имплицит. 25% — изменение мода. Рекомендуется на предметах 20+ ex.' },
+    ],
+    tips: [
+      'Ищи базы с тегом "ilvl83" — на них доступны T1 моды (ES 270+)',
+      'Лучшие суффиксы для продажи: +1 к уровню заклинаний, скорость каста, мана',
+      'Если выпало 4 нужных мода без Annul/Exalt — продавай сразу, не жадничай',
+      'God roll: T1 ES + "+1 spell skills" + T1 mana + resist → 100–200 ex',
+    ],
+    currencyForCalc: { chaos: 20, annulment: 1, exalted: 1 },
+    buyForCalc: 1,
+  },
+  {
+    id: 'r2',
+    title: 'Life/Res Astral Plate — броня для воина',
+    tag: 'Броня · ilvl84+',
+    risk: 'низкий',
+    budget: '2–5 ex',
+    sellRange: '30–80 ex',
+    roi: '8–20x',
+    color: '#c8a96e',
+    base: 'Astral Plate (ilvl 84)',
+    basePrice: '0.2–0.5 ex',
+    goal: 'T1 Max Life + T1 Armour + хорошие резисты',
+    steps: [
+      { cur: 'Покупка базы', qty: '1', cost: '~0.3 ex', text: 'Astral Plate ilvl84 с 1–2 хорошими модами (T1 Life или T1 Armour). Можно взять даже с плохими модами за 0.1–0.2ex.' },
+      { cur: 'Chaos Orb', qty: '15–40', cost: '1.5–4 ex', text: 'Chaos-спам до T1 Life + T1 Armour. Жизнь — приоритет #1. Останавливаемся при 2+ нужных модах. Среднее — 20–30 хаосов.' },
+      { cur: 'Exalted Orb', qty: '1', cost: '1 ex', text: 'Если есть T1 Life + T1 Armour + 1 хороший резист — добавляем ещё один мод. Не используем при меньше 3 нужных модов.' },
+      { cur: 'Divine Orb', qty: '1', cost: '~17 ex', text: 'Только если жизнь упала ниже 90% от максимума и предмет стоит 40+ ex. T1 Life = 90–99 HP: при 90 диваин может дать 99.' },
+      { cur: 'Vaal Orb', qty: '1', cost: '~0.5 ex', text: 'Хороший имплицит для Astral Plate: +% максимальная жизнь, +% сопротивление. Рекомендуется на готовых предметах 25+ ex.' },
+    ],
+    tips: [
+      'Приоритет суффиксов: резист огонь, резист холод (самые востребованные)',
+      'T1 Life = 90–99 HP, T2 Life = 80–89 — разница в цене может быть 2–3x',
+      'Предметы с 3 резистами + Life стоят дорого даже с T2–T3 значениями',
+      'Покупай когда цена базы упала (середина лиги) — больше предложения',
+    ],
+    currencyForCalc: { chaos: 25, exalted: 1 },
+    buyForCalc: 0.3,
+  },
+  {
+    id: 'r3',
+    title: '+1 Wand / Staff для кастеров',
+    tag: 'Оружие · ilvl83+',
+    risk: 'средний',
+    budget: '5–15 ex',
+    sellRange: '60–200 ex',
+    roi: '10–40x',
+    color: '#c888e8',
+    base: 'Imbued Wand или Convoking Wand (ilvl83+)',
+    basePrice: '0.5–2 ex',
+    goal: '"+1 к уровню всех скилов" + Spell Damage / Cast Speed',
+    steps: [
+      { cur: 'Покупка базы', qty: '1', cost: '~1 ex', text: 'Ищи Convoking Wand или Imbued Wand ilvl83. Оптимально — уже с модом "+1 к уровню заклинаний" (Magic или Rare). Такие базы стоят 0.5–3ex.' },
+      { cur: 'Regal Orb', qty: '1', cost: '~0.3 ex', text: 'Если база Magic с "+1 spell skills" — используй Regal для перевода в Rare. Добавится 1 случайный мод.' },
+      { cur: 'Chaos Orb', qty: '10–20', cost: '1–2 ex', text: 'Если у Rare плохие дополнительные моды — Chaos-спам. СТОП: если выпало "+1 spell skills" + Spell Damage или Cast Speed — это уже продаваемый предмет (20–40ex).' },
+      { cur: 'Exalted Orb', qty: '1–2', cost: '1–2 ex', text: 'Если есть 2–3 хороших мода ("+1" + Dmg/Speed) — добавляй следующие. Максимально 3 Exalted на предмет (не более 6 модов).' },
+      { cur: 'Annulment Orb', qty: '1', cost: '~3 ex', text: 'Используй ТОЛЬКО если есть мод "+1 spell skills" + ещё 1 нужный + мусорный мод. Удаляет случайный — риск потерять "+1".' },
+      { cur: 'Divine Orb', qty: '1', cost: '~17 ex', text: 'На завершённом жезле со всеми нужными модами — диваин значений Spell Damage или Cast Speed. Только если предмет уже стоит 80+ ex.' },
+    ],
+    tips: [
+      '"+1 к уровню всех заклинаний" — самый дорогой мод на оружии кастера',
+      'Сочетание "+1 spell" + "+1 fire/cold/lightning skills" = god tier (150–300 ex)',
+      'Convoking Wand лучше для некромантов, Imbued Wand — для универсальных кастеров',
+      'Проверяй meta.poe.gg какие билды актуальны — это определяет цену',
+    ],
+    currencyForCalc: { chaos: 15, regal: 1, exalted: 2 },
+    buyForCalc: 1,
+  },
+  {
+    id: 'r4',
+    title: 'Two-Stone Ring с двойным резистом',
+    tag: 'Аксессуар · ilvl82+',
+    risk: 'низкий',
+    budget: '2–8 ex',
+    sellRange: '25–80 ex',
+    roi: '6–20x',
+    color: '#4caf6e',
+    base: 'Two-Stone Ring (ilvl 82)',
+    basePrice: '0.3–0.8 ex',
+    goal: 'T1 Life + T1 двойной резист (Fire/Cold, Fire/Light, Cold/Light)',
+    steps: [
+      { cur: 'Покупка базы', qty: '1', cost: '~0.5 ex', text: 'Two-Stone Ring ilvl82 — имплицит уже даёт 2 резиста. Ищи с хотя бы 1 хорошим модом (T1 Life или T1 резист). Базы без нужных модов берём только за 0.1–0.2ex.' },
+      { cur: 'Chaos Orb', qty: '15–35', cost: '1.5–3.5 ex', text: 'Chaos-спам до T1 Life + T1 резист (или T1 Life + 2x T2 резиста). Кольца имеют меньше слотов — среднее 20 хаосов.' },
+      { cur: 'Exalted Orb', qty: '1', cost: '1 ex', text: 'При 3 нужных модах добавляем 4й. Идеал: T1 Life + Fire Res + Cold Res + Intelligence/Strength.' },
+      { cur: 'Vaal Orb', qty: '1', cost: '~0.5 ex', text: 'Хороший имплицит на кольцо: +% к жизни, дополнительный резист, +Str/Dex/Int. Рекомендуется на предметах 20+ ex.' },
+    ],
+    tips: [
+      'Имплицит Two-Stone: Fire+Cold, Fire+Lightning, или Cold+Lightning — каждый вариант имеет аудиторию',
+      'Добавь Strength или Dexterity к резистам — это делает кольцо универсальным',
+      'T1 Life (65–70 HP) на кольце = дорого, T2 (55–64) тоже хорошо продаётся',
+      'Резисты 30–35% (T1) ценятся выше, чем 20–29% (T2)',
+    ],
+    currencyForCalc: { chaos: 20, exalted: 1, vaal: 1 },
+    buyForCalc: 0.5,
+  },
+  {
+    id: 'r5',
+    title: 'Vaal Orb гамбл на Unique с bad rolls',
+    tag: 'Unique · любой ilvl',
+    risk: 'высокий',
+    budget: '1–5 ex',
+    sellRange: '20–500 ex',
+    roi: 'варьируется',
+    color: '#e87878',
+    base: 'Уникальный предмет с плохими значениями',
+    basePrice: '0.5–3 ex',
+    goal: 'Получить luckier rolls через Vaal или редкий corrupted имплицит',
+    steps: [
+      { cur: 'Покупка', qty: '1', cost: '0.5–3 ex', text: 'Найди уникальный предмет с "bad rolls" (значения близко к минимуму). Сравни цену с "good rolls" версией — разница должна быть 5x+. Пример: bad roll Mageblood = 50ex, good roll = 300ex.' },
+      { cur: 'Divine Orb', qty: '1–3', cost: '17–51 ex', text: 'Диваин ребролит значения уникальных предметов. При плохих значениях — шанс улучшить значительный. ВАЖНО: считай EV! Если bad roll = 50ex, good roll = 300ex, divine = 17ex: при 50% шансе поднять на +50% значений — EV положительный.' },
+      { cur: 'Vaal Orb', qty: '1', cost: '~0.5 ex', text: 'Vaal на уникальном: 25% — corrupted имплицит (может стоить 2–10x больше). 25% — без изменений corrupted. 25% — реролл в другой unique (редко хорошо). 25% — разрушить до normal (плохо). Только на предметах где potential upside >> цена предмета.' },
+    ],
+    tips: [
+      'Лучшие уники для bad roll стратегии: Mageblood, Headhunter (если есть в PoE2), Shav Wrappings',
+      'Считай EV перед каждым диваином: (шанс улучшить × прибыль) - (шанс ухудшить × потеря)',
+      'Vaal на corrupted уникальном НЕ работает — предмет уже corrupted',
+      'Самые дорогие corrupted имплициты: +1 к уровню скилов, additional curse, spell leech',
+    ],
+    currencyForCalc: { divine: 2, vaal: 1 },
+    buyForCalc: 2,
+  },
+  {
+    id: 'r6',
+    title: 'Amulet ilvl82 с T1 модом',
+    tag: 'Аксессуар · ilvl82+',
+    risk: 'средний',
+    budget: '3–12 ex',
+    sellRange: '40–150 ex',
+    roi: '8–25x',
+    color: '#f0c040',
+    base: 'Amber / Jade / Lapis / Onyx Amulet (ilvl 82)',
+    basePrice: '0.5–1.5 ex',
+    goal: '+1 к скилам + T1 основной стат или Life',
+    steps: [
+      { cur: 'Покупка базы', qty: '1', cost: '~1 ex', text: 'Ищи амулет ilvl82 с уже имеющимся T1 модом. Лучшие базы: Onyx (+Str/Dex/Int имплицит), Citrine (+Str/Dex), Turquoise (+Dex/Int). Берём только с 1+ хорошим модом.' },
+      { cur: 'Chaos Orb', qty: '20–50', cost: '2–5 ex', text: 'Chaos-спам. Цель: "+1 к уровню скилов" ИЛИ T1 All Attributes + T1 Life. Амулеты сложнее — ожидай 30–50 хаосов. Останавливаемся при 3+ нужных модах.' },
+      { cur: 'Exalted Orb', qty: '1–2', cost: '1–2 ex', text: '3 хороших мода → добавляем 4й и 5й. Приоритет: Life, основные статы, резисты.' },
+      { cur: 'Annulment Orb', qty: '1', cost: '~3 ex', text: 'При 4 хороших и 1–2 плохих модах — гамбл на удаление мусора. Вероятность удалить нужный мод = 1/(кол-во модов). При 5 модах и 1 мусорном — 20% риск.' },
+      { cur: 'Divine Orb', qty: '1', cost: '~17 ex', text: 'Только на предметах 60+ ex для оптимизации значений.' },
+      { cur: 'Vaal Orb', qty: '1', cost: '~0.5 ex', text: 'Топ имплициты для амулета: +1 к уровню скилов (редко, дорого), дополнительное проклятие, leech.' },
+    ],
+    tips: [
+      '"Mods: +1 to Level of all Spell Skills" — самый дорогой мод, поднимает цену в 3–5x',
+      'Onyx Amulet (имплицит +10 all attributes) — самая универсальная база',
+      'Амулет с "+1 spell skills" + T1 Crit Multiplier → кастеры платят 100–300 ex',
+      'Проверяй poe2db.tw для списка возможных модов на нужном ilvl',
+    ],
+    currencyForCalc: { chaos: 35, exalted: 2, annulment: 1 },
+    buyForCalc: 1,
+  },
+];
+
+const RISK_COLOR = { 'низкий': '#4caf6e', 'средний': '#f0c040', 'высокий': '#e05252' };
+
+function renderRecipes() {
+  const c = document.getElementById('recipes-container');
+  c.innerHTML = RECIPES.map(r => `
+    <div class="card" style="border-left: 3px solid ${r.color}; margin-bottom: 20px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+        <div>
+          <h2 style="font-size:17px; color:${r.color}; margin-bottom:4px;">${r.title}</h2>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <span style="background:var(--surface2);color:var(--muted);font-size:11px;padding:2px 8px;border-radius:20px;">${r.tag}</span>
+            <span style="background:var(--surface2);font-size:11px;padding:2px 8px;border-radius:20px;color:${RISK_COLOR[r.risk]}">Риск: ${r.risk}</span>
+            <span style="background:var(--surface2);color:var(--accent);font-size:11px;padding:2px 8px;border-radius:20px;">Бюджет: ${r.budget}</span>
+            <span style="background:var(--surface2);color:var(--green);font-size:11px;padding:2px 8px;border-radius:20px;">Продажа: ${r.sellRange}</span>
+            <span style="background:var(--surface2);color:var(--accent2);font-size:11px;padding:2px 8px;border-radius:20px;">ROI: ${r.roi}</span>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadRecipeIntoCalc('${r.id}')">→ Калькулятор</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">
+        <div style="background:var(--bg);padding:10px;border-radius:6px;border:1px solid var(--border)">
+          <div style="color:var(--muted);font-size:11px;margin-bottom:2px">База</div>
+          <div style="font-size:13px;">${r.base}</div>
+          <div style="color:var(--accent);font-size:12px;margin-top:2px">${r.basePrice}</div>
+        </div>
+        <div style="background:var(--bg);padding:10px;border-radius:6px;border:1px solid var(--border)">
+          <div style="color:var(--muted);font-size:11px;margin-bottom:2px">Цель крафта</div>
+          <div style="font-size:12px;color:var(--accent2);">${r.goal}</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <div style="color:var(--muted);font-size:12px;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Шаги</div>
+        ${r.steps.map((s, i) => `
+          <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);align-items:flex-start;">
+            <div style="min-width:24px;height:24px;background:var(--surface2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${r.color};flex-shrink:0;">${i+1}</div>
+            <div style="flex:1;">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">
+                <strong style="font-size:13px;">${s.cur}</strong>
+                ${s.qty !== '1' && s.qty !== '' ? `<span style="color:var(--muted);font-size:11px">× ${s.qty}</span>` : ''}
+                <span style="color:var(--accent);font-size:12px;margin-left:auto;">${s.cost}</span>
+              </div>
+              <div style="color:var(--text);font-size:12px;line-height:1.6;">${s.text}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div>
+        <div style="color:var(--muted);font-size:12px;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Советы</div>
+        <ul style="padding-left:18px;display:flex;flex-direction:column;gap:4px;">
+          ${r.tips.map(t => `<li style="font-size:12px;color:var(--text);line-height:1.6;">${t}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+  `).join('');
+}
+
+function loadRecipeIntoCalc(id) {
+  const r = RECIPES.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('calc-name').value = r.title;
+  document.getElementById('calc-buy').value = r.buyForCalc;
+  Object.keys(CURRENCY_RATES).forEach(k => {
+    const el = document.getElementById('cur-' + k);
+    if (el) el.value = r.currencyForCalc[k] || 0;
+  });
+  switchTab('calc');
+  recalc();
+}
+
 // Helper: add deal from search results
 function addDealFromSearch(item) {
   deals.unshift({ id: Date.now(), name: item.name, buy: item.buy, sell: null, craft: 0, addedAt: new Date().toLocaleString() });
@@ -1498,6 +1756,7 @@ renderDemoTable();
 renderMonitor();
 renderCraftHistory();
 renderDeals();
+renderRecipes();
 recalc();
 </script>
 </body>
